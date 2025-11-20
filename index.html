@@ -208,7 +208,6 @@
     const pdfUrl = "日本語復唱課題.pdf";
     const totalSlides = 11;
     const pauseAfterSlide = 3;
-    const autoStopMs = 8000; // 録音自動停止までの秒数（必要に応じて調整）
     const canvas = document.getElementById("pdf-canvas");
     const slideCounter = document.getElementById("slide-counter");
     const displayId = document.getElementById("display-id");
@@ -236,7 +235,6 @@
     let participantId = "";
     let chosenMimeType = "";
     let promptAudio = new Audio();
-    let autoStopTimer = null;
 
     const preferredMimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", ""];
 
@@ -327,12 +325,15 @@
 
     promptAudio.onplay = () => {
       setAudioStatus(`再生中: Slide${currentSlide}.wav`);
+      setStatus("スライド音声が開始されました。録音を開始します。");
+      startRecordingForCurrentSlide();
     };
 
     promptAudio.onended = () => {
-      setAudioStatus("録音準備中");
-      setStatus("録音を開始します。");
-      setTimeout(() => startRecordingForCurrentSlide(), 300);
+      setAudioStatus("再生終了");
+      if (isRecording) {
+        setStatus("スライド音声の再生が終わりました。録音を継続しています。");
+      }
     };
 
     promptAudio.onerror = () => {
@@ -429,12 +430,11 @@
 
     const startRecordingForCurrentSlide = async () => {
       if (!stream || isRecording) return;
-      if (promptAudio && !promptAudio.paused && !promptAudio.ended) return;
       recordedChunks = [];
       setLiveState(true);
       manualStartButton.disabled = true;
       stopButton.disabled = false;
-      setStatus(`録音中: スライド${currentSlide}（${autoStopMs / 1000}秒で自動停止）`);
+      setStatus(`録音中: スライド${currentSlide}（停止ボタンを押すまで継続）`);
       try {
         const recorderOptions = chosenMimeType ? { mimeType: chosenMimeType } : undefined;
         mediaRecorder = recorderOptions ? new MediaRecorder(stream, recorderOptions) : new MediaRecorder(stream);
@@ -452,19 +452,11 @@
       };
       mediaRecorder.onstop = handleRecordingStop;
       mediaRecorder.start();
-      if (autoStopTimer) clearTimeout(autoStopTimer);
-      autoStopTimer = setTimeout(() => {
-        stopRecording();
-      }, autoStopMs);
     };
 
     const stopRecording = () => {
       if (mediaRecorder && isRecording) {
         mediaRecorder.stop();
-      }
-      if (autoStopTimer) {
-        clearTimeout(autoStopTimer);
-        autoStopTimer = null;
       }
     };
 
@@ -486,10 +478,6 @@
       setLiveState(false);
       stopButton.disabled = true;
       setStatus("保存処理中...");
-      if (autoStopTimer) {
-        clearTimeout(autoStopTimer);
-        autoStopTimer = null;
-      }
 
       try {
         const audioBlob = new Blob(recordedChunks, { type: chosenMimeType || "audio/webm" });
